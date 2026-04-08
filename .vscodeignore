@@ -1,0 +1,9 @@
+.vscode/**
+.git/**
+.claude/**
+.gitignore
+src/**/*.test.js
+node_modules/**
+scripts/**
+**/*.map
+**/*.md
