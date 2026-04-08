@@ -53,7 +53,8 @@ description = "Ignore common non-secret file types"
 paths = [
   '''\\.(png|jpg|gif|svg|ico|woff|ttf|eot|pdf|lock)$''',
   '''\\.terraform[\\\\/]''',
-  '''terraform\\.tfstate'''
+  '''terraform\\.tfstate''',
+  '''\\.vscode[\\\\/]'''
 ]
 `;
 
