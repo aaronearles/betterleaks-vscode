@@ -191,7 +191,7 @@ keywords = ["GOCSPX-"]
 [[rules]]
 id = "dockerfile-secret-env"
 description = "Secret value baked into Dockerfile via ENV or ARG"
-regex = '''(?i)^(ENV|ARG)\s+(PASSWORD|SECRET|TOKEN|API_KEY|ACCESS_KEY|PRIVATE_KEY|DB_PASS(WORD)?)\s*[=]?\s*(?!["']?\s*$)(\S{6,})'''
+regex = '''(?i)^(ENV|ARG)\s+(PASSWORD|SECRET|TOKEN|API_KEY|ACCESS_KEY|PRIVATE_KEY|DB_PASS(WORD)?)\s*[=]?\s*(\S{6,})'''
 secretGroup = 4
 keywords = ["ENV", "ARG", "PASSWORD", "SECRET", "TOKEN"]
 path = '''Dockerfile$|dockerfile$|Dockerfile\.\w+$'''
@@ -206,7 +206,7 @@ path = '''Dockerfile$|dockerfile$|Dockerfile\.\w+$'''
 [[rules]]
 id = "docker-compose-secret"
 description = "Plaintext secret in docker-compose environment block"
-regex = '''(?i)^\s+(PASSWORD|SECRET|TOKEN|API_KEY|ACCESS_KEY|DB_PASS(WORD)?|PRIVATE_KEY)\s*[:=]\s*(?!\$\{)([^$\s{][^\s]{5,})'''
+regex = '''(?i)^\s+(PASSWORD|SECRET|TOKEN|API_KEY|ACCESS_KEY|DB_PASS(WORD)?|PRIVATE_KEY)\s*[:=]\s*([^$\s{][^\s]{5,})'''
 secretGroup = 3
 entropy = 3.0
 keywords = ["PASSWORD", "SECRET", "TOKEN", "API_KEY"]
@@ -215,7 +215,7 @@ path = '''docker-compose.*\.ya?ml$|compose\.ya?ml$'''
   [[rules.allowlists]]
   description = "Allow env-var references and placeholders"
   regexes = [
-    '''\$\{|\$\(|(?i)(placeholder|changeme|example|todo)'''
+    '''^\$\{|^\$\(|(?i)(placeholder|changeme|example|todo)'''
   ]
 
 [[rules]]
@@ -319,10 +319,16 @@ keywords = ["PULUMI_ACCESS_TOKEN", "pul-"]
 [[rules]]
 id = "pulumi-config-plaintext-secret"
 description = "Pulumi config value passed on the CLI without --secret flag"
-regex = '''pulumi\s+config\s+set\s+(?!--secret)[a-zA-Z0-9:_\-]+\s+["']?([^\s"']{8,})["']?'''
+regex = '''pulumi\s+config\s+set\s+[a-zA-Z0-9:_\-]+\s+["']?([^\s"']{8,})["']?'''
 secretGroup = 1
 entropy = 3.0
 keywords = ["pulumi config set"]
+
+  [[rules.allowlists]]
+  description = "Allow correct usage with --secret flag"
+  regexes = [
+    '''--secret'''
+  ]
 
 # ============================================================
 # .ENV FILES
@@ -333,7 +339,7 @@ keywords = ["pulumi config set"]
 [[rules]]
 id = "dotenv-generic-secret"
 description = "Secret assigned in a .env file"
-regex = '''(?i)^(PASSWORD|PASSWD|SECRET|TOKEN|API_KEY|APIKEY|ACCESS_KEY|PRIVATE_KEY|CLIENT_SECRET|AUTH_TOKEN|DB_PASS(WORD)?|MASTER_KEY|ENCRYPTION_KEY|SIGNING_KEY|WEBHOOK_SECRET)\s*=\s*(?!\$\{|""\s*$|''\s*$)(.{6,})'''
+regex = '''(?i)^(PASSWORD|PASSWD|SECRET|TOKEN|API_KEY|APIKEY|ACCESS_KEY|PRIVATE_KEY|CLIENT_SECRET|AUTH_TOKEN|DB_PASS(WORD)?|MASTER_KEY|ENCRYPTION_KEY|SIGNING_KEY|WEBHOOK_SECRET)\s*=\s*([^\s$]{1}.{5,})'''
 secretGroup = 3
 entropy = 3.0
 keywords = ["PASSWORD", "SECRET", "TOKEN", "API_KEY", "ACCESS_KEY", "PRIVATE_KEY"]
@@ -508,7 +514,7 @@ keywords = ["secret_id", "VAULT_SECRET_ID", "approle_secret"]
 [[rules]]
 id = "github-actions-literal-secret"
 description = "Literal secret value in a GitHub Actions workflow where ${{ secrets.* }} should be used"
-regex = '''(?i)(TOKEN|PASSWORD|SECRET|API_KEY|ACCESS_KEY)\s*:\s*(?!\$\{\{)["']([^"']{10,})["']'''
+regex = '''(?i)(TOKEN|PASSWORD|SECRET|API_KEY|ACCESS_KEY)\s*:\s*["']([^"']{10,})["']'''
 secretGroup = 2
 entropy = 3.5
 keywords = ["TOKEN:", "PASSWORD:", "SECRET:", "API_KEY:"]
@@ -517,7 +523,7 @@ path = '''\.github/workflows/|\.github/actions/'''
   [[rules.allowlists]]
   description = "Allow proper secrets context references"
   regexes = [
-    '''\$\{\{\s*secrets\.'''
+    '''\$\{\{'''
   ]
 
 [[rules]]
