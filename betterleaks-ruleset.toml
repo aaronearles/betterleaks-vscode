@@ -20,6 +20,25 @@ useDefault = true
 # ============================================================
 
 [[rules]]
+id = "iac-generic-password"
+description = "Password/secret assignment in IaC or config files"
+# Fills a gap in defaults: built-in rules use character classes that exclude
+# special characters ($@#%^&*), so human-chosen passwords slip through.
+# This rule matches any quoted value 8+ chars assigned to a secret-named key.
+regex = '''(?i)(password|passwd|pwd|secret|token|api[_-]?key|access[_-]?key)\s*=\s*["']([^"']{8,})["']'''
+secretGroup = 2
+entropy = 3.0
+keywords = ["password", "passwd", "pwd", "secret", "token", "api_key", "access_key"]
+path = '''\.(tf|tfvars|auto\.tfvars|hcl|env|ps1|psm1|psd1|sh|bash|zsh|yaml|yml|json|ini|conf|config|toml)$'''
+
+  [[rules.allowlists]]
+  description = "Allow placeholder values and variable references"
+  regexes = [
+    '''(?i)(placeholder|changeme|fake|example|dummy|todo|tbd|n/?a|<[^>]+>|\$\{|\$\()''',
+    '''(?i)^(true|false|yes|no|null|none|undefined)$'''
+  ]
+
+[[rules]]
 id = "iac-sensitive-tfvar"
 description = "Sensitive variable with a plaintext value in a .tfvars file"
 regex = '''(?i)^(db_pass(word)?|admin_pass(word)?|root_pass(word)?|secret|api_key|client_secret|private_key|access_token)\s*=\s*["']([^"']{6,})["']'''

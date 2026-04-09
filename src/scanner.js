@@ -31,7 +31,7 @@ function getBinaryPath() {
 let scanInProgress = false;
 let pendingScan = null;
 
-function runScan(targetPath) {
+function runScan(targetPath, onComplete) {
     if (scanInProgress) {
         pendingScan = targetPath;
         return;
@@ -73,6 +73,7 @@ function runScan(targetPath) {
         if (err) {
             vscode.window.showErrorMessage(`Betterleaks error: ${stderr ? stderr.trim() : err.message}`);
             cleanup(reportPath);
+            if (onComplete) onComplete();
             return;
         }
 
@@ -95,6 +96,7 @@ function runScan(targetPath) {
         }
 
         updateStatusBar(getTotalCount());
+        if (onComplete) onComplete();
     });
 }
 
