@@ -49,3 +49,9 @@ Decisions made during development, with rationale. Reference this when writing t
 **Decision:** Set `maxBuffer: 10 * 1024 * 1024` on `execFile()`.
 
 **Why:** Node's default is 1MB. On large workspaces, stdout/stderr can exceed this, causing silent truncation. While we now use file-based JSON output for findings, stderr and any unexpected stdout still flow through the buffer.
+
+## 9. Standalone `betterleaks-ruleset.toml` with workspace config precedence
+
+**Decision:** Ship the bundled ruleset as a standalone `betterleaks-ruleset.toml` file instead of a JS string constant. Only pass it via `BETTERLEAKS_CONFIG_TOML` env var when no workspace `.betterleaks.toml` or `.gitleaks.toml` exists.
+
+**Why:** Betterleaks config precedence puts env vars (priority 3) above workspace files (priority 4). The original implementation always set `BETTERLEAKS_CONFIG_TOML`, which silently overrode any per-repo config — meaning a user's custom `.betterleaks.toml` was ignored. The fix checks for workspace configs first and only falls back to the bundled ruleset. Moving to a standalone `.toml` file also makes the ruleset readable, downloadable, and customizable without digging through JS source.

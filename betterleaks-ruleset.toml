@@ -1,0 +1,632 @@
+title = "Betterleaks IaC Ruleset"
+
+[extend]
+useDefault = true
+
+# NOTE ON RULE SELECTION
+# useDefault = true means betterleaks' built-in rules already cover:
+#   AWS access/secret keys, GitHub PATs, GitLab PATs, Slack tokens,
+#   Stripe, SendGrid, npm tokens, SSH/PGP private key blocks, JWTs, and more.
+#
+# Rules below fall into one of three categories:
+#   (a) IaC/cloud patterns the defaults don't cover at all
+#   (b) Default rules we override to add path scoping or IaC-specific allowlists
+#   (c) Patterns that only make sense in infrastructure file contexts
+#
+# If a rule exists here AND in the defaults, a comment says why.
+
+# ============================================================
+# TERRAFORM / IaC — GENERIC
+# ============================================================
+
+[[rules]]
+id = "iac-generic-password"
+description = "Generic password/secret assignment in IaC or shell files"
+# Overrides default: adds path scoping to IaC/shell extensions and rejects
+# variable-reference values (\${ / \$() that a default regex won't filter.
+regex = '''(?i)(password|passwd|pwd|secret|token|api[_-]?key|access[_-]?key)\s*=\s*["']([^"'$\s{][^"']{7,})["']'''
+secretGroup = 2
+entropy = 3.0
+tokenEfficiency = true
+keywords = ["password", "passwd", "pwd", "secret", "token", "api_key", "access_key"]
+path = '''\.(tf|tfvars|auto\.tfvars|hcl|env|ps1|psm1|psd1|sh|bash|zsh|yaml|yml|json|ini|conf|config|toml)$'''
+
+  [[rules.allowlists]]
+  description = "Allow placeholder values and variable references"
+  regexes = [
+    '''(?i)(placeholder|changeme|fake|example|dummy|todo|tbd|n/?a|<[^>]+>|\$\{|\$\()''',
+    '''(?i)^(true|false|yes|no|null|none|undefined)$'''
+  ]
+
+[[rules]]
+id = "iac-connection-string"
+description = "Database or storage connection string in IaC/config"
+regex = '''(?i)(connection[_-]?string|connstr|conn_str|jdbc[_-]?url|datasource[_-]?url)\s*=\s*["']([^"']{12,})["']'''
+secretGroup = 2
+entropy = 3.5
+tokenEfficiency = true
+keywords = ["connection_string", "connstr", "jdbc", "datasource"]
+
+  [[rules.allowlists]]
+  description = "Allow localhost/example URIs"
+  regexes = [
+    '''(?i)(localhost|127\.0\.0\.1|example\.com|placeholder)'''
+  ]
+
+[[rules]]
+id = "iac-sensitive-tfvar"
+description = "Sensitive variable with a plaintext value in a .tfvars file"
+regex = '''(?i)^(db_pass(word)?|admin_pass(word)?|root_pass(word)?|secret|api_key|client_secret|private_key|access_token)\s*=\s*["']([^"']{6,})["']'''
+secretGroup = 5
+entropy = 3.0
+keywords = ["db_pass", "admin_pass", "client_secret", "private_key", "access_token"]
+path = '''\.tfvars$|\.auto\.tfvars$'''
+
+  [[rules.allowlists]]
+  description = "Allow placeholder and Terraform variable references"
+  regexes = [
+    '''(?i)(placeholder|changeme|example|var\.|data\.)'''
+  ]
+
+[[rules]]
+id = "terraform-cloud-token"
+description = "Terraform Cloud / HCP Terraform API token"
+# Not in defaults. Format: <random>.atlasv1.<long>
+regex = '''(?i)(TF_API_TOKEN|TF_TOKEN_[A-Z_]+|terraform[_-]?token)\s*[=:]\s*["']?([A-Za-z0-9]{14}\.atlasv1\.[A-Za-z0-9]{60,})["']?'''
+secretGroup = 2
+keywords = ["atlasv1", "TF_API_TOKEN", "TF_TOKEN"]
+
+# ============================================================
+# AWS
+# ============================================================
+
+[[rules]]
+id = "aws-session-token"
+description = "AWS temporary STS session token"
+# Not in defaults (defaults cover static access/secret keys, not session tokens).
+regex = '''(?i)(aws[_-]?session[_-]?token|AWS_SESSION_TOKEN)\s*[=:]\s*["']?([A-Za-z0-9+/=]{100,})["']?'''
+secretGroup = 2
+entropy = 4.5
+keywords = ["aws_session_token", "AWS_SESSION_TOKEN"]
+
+# ============================================================
+# AZURE
+# ============================================================
+
+[[rules]]
+id = "azure-storage-account-key"
+description = "Azure storage account key (base64, 88 chars with == suffix)"
+regex = '''(?i)(account[_-]?key|storage[_-]?key|StorageAccountKey|AccountKey)\s*[=:]\s*["']?([A-Za-z0-9+/]{86}==)["']?'''
+secretGroup = 2
+entropy = 4.5
+keywords = ["account_key", "storage_key", "AccountKey", "StorageAccountKey"]
+
+[[rules]]
+id = "azure-storage-connection-string"
+description = "Azure storage full connection string with embedded key"
+regex = '''DefaultEndpointsProtocol=https;AccountName=[^;]+;AccountKey=[A-Za-z0-9+/=]{50,};'''
+entropy = 3.5
+keywords = ["DefaultEndpointsProtocol", "AccountKey", "AccountName"]
+
+[[rules]]
+id = "azure-sas-token"
+description = "Azure Shared Access Signature token"
+regex = '''(?i)(sas[_-]?token|SAS_TOKEN|SharedAccessSignature)\s*[=:]\s*["']?(sv=\d{4}-\d{2}-\d{2}&[^"'\s]{20,})["']?'''
+secretGroup = 2
+keywords = ["sas_token", "SharedAccessSignature", "sv="]
+
+[[rules]]
+id = "azure-service-bus-connection-string"
+description = "Azure Service Bus or Event Hub connection string"
+regex = '''Endpoint=sb://[^/]+\.servicebus\.windows\.net/;SharedAccessKeyName=[^;]+;SharedAccessKey=[A-Za-z0-9+/=]{40,}'''
+entropy = 3.5
+keywords = ["servicebus.windows.net", "SharedAccessKeyName", "SharedAccessKey"]
+
+[[rules]]
+id = "azure-client-secret"
+description = "Azure AD application client secret"
+regex = '''(?i)(client[_-]?secret|AZURE_CLIENT_SECRET|clientSecret)\s*[=:]\s*["']?([A-Za-z0-9~._\-]{34,}|[A-Za-z0-9+/=]{40,})["']?'''
+secretGroup = 2
+entropy = 4.0
+keywords = ["client_secret", "AZURE_CLIENT_SECRET", "clientSecret"]
+
+  [[rules.allowlists]]
+  description = "Allow obvious placeholder client secrets"
+  regexes = [
+    '''(?i)(placeholder|changeme|your[-_]?secret|<client[-_]?secret>)'''
+  ]
+
+[[rules]]
+id = "azure-apim-subscription-key"
+description = "Azure API Management subscription key"
+regex = '''(?i)(Ocp-Apim-Subscription-Key|apim[_-]?key|subscription[_-]?key)\s*[=:]\s*["']?([A-Za-z0-9]{32})["']?'''
+secretGroup = 2
+entropy = 3.5
+keywords = ["Ocp-Apim-Subscription-Key", "apim_key", "subscription_key"]
+
+[[rules]]
+id = "azure-devops-pat"
+description = "Azure DevOps Personal Access Token (52-char base64)"
+regex = '''(?i)(ADO_PAT|AZURE_DEVOPS_PAT|azdo[_-]?token|devops[_-]?token)\s*[=:]\s*["']?([A-Za-z0-9]{52})["']?'''
+secretGroup = 2
+entropy = 4.0
+keywords = ["ADO_PAT", "AZURE_DEVOPS_PAT", "azdo_token"]
+
+# ============================================================
+# GCP / GOOGLE CLOUD
+# ============================================================
+
+[[rules]]
+id = "gcp-api-key"
+description = "Google Cloud API key"
+# Overrides default: adds IaC-specific allowlist for documented example keys.
+regex = '''AIza[0-9A-Za-z\-_]{35}'''
+entropy = 3.5
+keywords = ["AIza"]
+
+  [[rules.allowlists]]
+  description = "Allow documented example API keys"
+  regexes = [
+    '''AIzaSyXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX'''
+  ]
+
+[[rules]]
+id = "gcp-service-account-key-json"
+description = "GCP service account private key embedded in JSON or as inline string"
+regex = '''(?i)"private_key"\s*:\s*"(-----BEGIN (RSA |EC |)PRIVATE KEY-----[^"]{100,}-----END (RSA |EC |)PRIVATE KEY-----)'''
+secretGroup = 1
+entropy = 4.5
+keywords = ["private_key", "BEGIN PRIVATE KEY", "BEGIN RSA PRIVATE KEY"]
+
+[[rules]]
+id = "gcp-oauth-client-secret"
+description = "Google OAuth2 client secret (GOCSPX- prefix)"
+regex = '''GOCSPX-[A-Za-z0-9_\-]{28}'''
+keywords = ["GOCSPX-"]
+
+# ============================================================
+# DOCKER / CONTAINERS
+# ============================================================
+
+[[rules]]
+id = "dockerfile-secret-env"
+description = "Secret value baked into Dockerfile via ENV or ARG"
+regex = '''(?i)^(ENV|ARG)\s+(PASSWORD|SECRET|TOKEN|API_KEY|ACCESS_KEY|PRIVATE_KEY|DB_PASS(WORD)?)\s*[=]?\s*(?!["']?\s*$)(\S{6,})'''
+secretGroup = 4
+keywords = ["ENV", "ARG", "PASSWORD", "SECRET", "TOKEN"]
+path = '''Dockerfile$|dockerfile$|Dockerfile\.\w+$'''
+
+  [[rules.allowlists]]
+  description = "Allow ARG with no default, and placeholder values"
+  regexes = [
+    '''(?i)^ARG\s+\w+\s*$''',
+    '''(?i)(placeholder|changeme|example|\$\{|\$\()'''
+  ]
+
+[[rules]]
+id = "docker-compose-secret"
+description = "Plaintext secret in docker-compose environment block"
+regex = '''(?i)^\s+(PASSWORD|SECRET|TOKEN|API_KEY|ACCESS_KEY|DB_PASS(WORD)?|PRIVATE_KEY)\s*[:=]\s*(?!\$\{)([^$\s{][^\s]{5,})'''
+secretGroup = 3
+entropy = 3.0
+keywords = ["PASSWORD", "SECRET", "TOKEN", "API_KEY"]
+path = '''docker-compose.*\.ya?ml$|compose\.ya?ml$'''
+
+  [[rules.allowlists]]
+  description = "Allow env-var references and placeholders"
+  regexes = [
+    '''\$\{|\$\(|(?i)(placeholder|changeme|example|todo)'''
+  ]
+
+[[rules]]
+id = "docker-registry-credentials"
+description = "Docker registry password or token in config or compose"
+regex = '''(?i)(registry[_-]?password|DOCKER_PASSWORD|REGISTRY_PASS|dockerhub[_-]?token)\s*[=:]\s*["']?([^\s"']{8,})["']?'''
+secretGroup = 2
+entropy = 3.0
+keywords = ["DOCKER_PASSWORD", "registry_password", "dockerhub_token"]
+
+# ============================================================
+# KUBERNETES / HELM
+# ============================================================
+
+[[rules]]
+id = "kubeconfig-embedded-token"
+description = "Token or client key data embedded directly in a kubeconfig file"
+regex = '''(?i)(token|client-key-data|client-certificate-data)\s*:\s*([A-Za-z0-9+/=._\-]{50,})'''
+secretGroup = 2
+entropy = 4.5
+keywords = ["token:", "client-key-data", "client-certificate-data"]
+path = '''kubeconfig$|\.kubeconfig$|kube/config$|\.kube/config$'''
+
+[[rules]]
+id = "helm-values-secret"
+description = "High-entropy secret value in a Helm secrets override file"
+# Scoped to secrets-named files only (secrets.yaml, myapp-secrets.yaml, etc.)
+# rather than all values files. Anyone putting real secrets in values.yaml
+# is still caught by generic-high-entropy-secret.
+regex = '''(?i)^\s*(password|secret|token|apiKey|privateKey|accessKey|signingKey|encryptionKey)\s*:\s*["']?([A-Za-z0-9+/=_\-.]{16,})["']?\s*$'''
+secretGroup = 2
+entropy = 3.8
+keywords = ["password:", "secret:", "apiKey:", "privateKey:", "signingKey:"]
+path = '''(?i)(^|[\\/])secrets[\\/]|secrets.*\.ya?ml$|.*-secrets?\.ya?ml$|.*_secrets?\.ya?ml$'''
+
+  [[rules.allowlists]]
+  description = "Allow Helm templating, semver, image tags, and common placeholders"
+  regexes = [
+    '''\{\{|\$\{''',
+    '''(?i)(placeholder|changeme|RELEASE_NAME|chart-name|todo)''',
+    '''^\d+\.\d+\.\d+''',
+    '''(?i)^(latest|stable|main|master|develop|sha-)'''
+  ]
+
+# ============================================================
+# ANSIBLE
+# ============================================================
+
+[[rules]]
+id = "ansible-vault-password-plaintext"
+description = "Ansible vault or become password stored as plaintext"
+regex = '''(?i)(vault[_-]?password|become[_-]?pass|ansible[_-]?password|ANSIBLE_VAULT_PASSWORD)\s*[=:]\s*["']?([^\s"'#]{6,})["']?'''
+secretGroup = 2
+entropy = 3.0
+keywords = ["vault_password", "become_pass", "ansible_password", "ANSIBLE_VAULT_PASSWORD"]
+
+  [[rules.allowlists]]
+  description = "Allow vault-encrypted references"
+  regexes = [
+    '''\$ANSIBLE_VAULT|!vault'''
+  ]
+
+[[rules]]
+id = "ansible-inline-credential"
+description = "Hardcoded SSH or privilege-escalation credential in Ansible inventory or vars"
+regex = '''(?i)(ansible_ssh_pass|ansible_become_pass|ansible_password)\s*[=:]\s*["']?([^\s"']{6,})["']?'''
+secretGroup = 2
+keywords = ["ansible_ssh_pass", "ansible_become_pass", "ansible_password"]
+path = '''\.ya?ml$|inventory$|inventory\.ini$|hosts$'''
+
+# ============================================================
+# CLOUDFORMATION
+# ============================================================
+
+[[rules]]
+id = "cfn-parameter-default-secret"
+description = "Sensitive CloudFormation parameter with a hardcoded Default value"
+regex = '''(?i)"ParameterKey"\s*:\s*"(Password|Secret|ApiKey|Token|AccessKey)[^"]*"[^}]*"Default"\s*:\s*"([^"]{6,})"'''
+secretGroup = 2
+entropy = 3.0
+keywords = ["ParameterKey", "NoEcho", "Default"]
+path = '''\.json$|\.ya?ml$|\.template$'''
+
+  [[rules.allowlists]]
+  description = "Skip parameters that correctly use NoEcho without a Default"
+  regexes = [
+    '''"NoEcho"\s*:\s*"true"[^}]*"Default"\s*:\s*""'''
+  ]
+
+# ============================================================
+# PULUMI
+# ============================================================
+
+[[rules]]
+id = "pulumi-access-token"
+description = "Pulumi Cloud access token (pul- prefix)"
+regex = '''(?i)(PULUMI_ACCESS_TOKEN|pulumi[_-]?token)\s*[=:]\s*["']?(pul-[A-Za-z0-9]{40,})["']?'''
+secretGroup = 2
+keywords = ["PULUMI_ACCESS_TOKEN", "pul-"]
+
+[[rules]]
+id = "pulumi-config-plaintext-secret"
+description = "Pulumi config value passed on the CLI without --secret flag"
+regex = '''pulumi\s+config\s+set\s+(?!--secret)[a-zA-Z0-9:_\-]+\s+["']?([^\s"']{8,})["']?'''
+secretGroup = 1
+entropy = 3.0
+keywords = ["pulumi config set"]
+
+# ============================================================
+# .ENV FILES
+# Scoped to real .env files only — .env.sample/.env.example live in the
+# global allowlist so they don't generate noise on placeholder values.
+# ============================================================
+
+[[rules]]
+id = "dotenv-generic-secret"
+description = "Secret assigned in a .env file"
+regex = '''(?i)^(PASSWORD|PASSWD|SECRET|TOKEN|API_KEY|APIKEY|ACCESS_KEY|PRIVATE_KEY|CLIENT_SECRET|AUTH_TOKEN|DB_PASS(WORD)?|MASTER_KEY|ENCRYPTION_KEY|SIGNING_KEY|WEBHOOK_SECRET)\s*=\s*(?!\$\{|""\s*$|''\s*$)(.{6,})'''
+secretGroup = 3
+entropy = 3.0
+keywords = ["PASSWORD", "SECRET", "TOKEN", "API_KEY", "ACCESS_KEY", "PRIVATE_KEY"]
+path = '''(^|/)\.env$|(^|/)\.env\.\w+$'''
+
+  [[rules.allowlists]]
+  description = "Allow placeholder values"
+  regexes = [
+    '''(?i)(placeholder|changeme|your_.*_here|<[^>]+>|example|todo|fill_in|REPLACE_ME|ask[-_]devops)'''
+  ]
+
+[[rules]]
+id = "dotenv-database-url"
+description = "Database URL with embedded credentials in .env"
+regex = '''(?i)(DATABASE_URL|DB_URL|MONGO_URI|REDIS_URL|POSTGRES_URI)\s*=\s*((?:postgres|mysql|mongodb|redis|mssql)[^:]*://[^:]+:[^@\s]{3,}@[^\s]+)'''
+secretGroup = 2
+entropy = 3.5
+keywords = ["DATABASE_URL", "DB_URL", "MONGO_URI", "REDIS_URL", "POSTGRES_URI"]
+path = '''(^|/)\.env$|(^|/)\.env\.\w+$'''
+
+  [[rules.allowlists]]
+  description = "Allow localhost/example DB URLs"
+  regexes = [
+    '''(?i)(localhost|127\.0\.0\.1|example\.com|@db:|@postgres:|@redis:|@mongo:)'''
+  ]
+
+# ============================================================
+# POWERSHELL
+# ============================================================
+
+[[rules]]
+id = "powershell-securestring-plaintext"
+description = "ConvertTo-SecureString with -AsPlainText exposes the raw secret"
+regex = '''(?i)ConvertTo-SecureString\s+["']([^"']{6,})["']\s+-AsPlainText'''
+secretGroup = 1
+entropy = 3.0
+keywords = ["ConvertTo-SecureString", "AsPlainText"]
+path = '''\.ps1$|\.psm1$|\.psd1$'''
+
+[[rules]]
+id = "powershell-pscredential-hardcoded"
+description = "PSCredential constructed with a hardcoded password string"
+regex = '''(?i)New-Object\s+(?:System\.Management\.Automation\.)?PSCredential\s*\([^,]+,\s*\(ConvertTo-SecureString\s+["']([^"']{6,})["']'''
+secretGroup = 1
+entropy = 3.0
+keywords = ["PSCredential", "ConvertTo-SecureString"]
+path = '''\.ps1$|\.psm1$'''
+
+[[rules]]
+id = "powershell-invoke-auth-header"
+description = "Bearer or Basic auth token hardcoded in Invoke-RestMethod / Invoke-WebRequest"
+regex = '''(?i)(?:Invoke-RestMethod|Invoke-WebRequest)[^'";\n]*["'](Bearer\s+[A-Za-z0-9\-._~+/]{20,}|Basic\s+[A-Za-z0-9+/=]{20,})["']'''
+secretGroup = 1
+entropy = 3.5
+keywords = ["Invoke-RestMethod", "Invoke-WebRequest", "Bearer", "Authorization"]
+path = '''\.ps1$|\.psm1$'''
+
+[[rules]]
+id = "powershell-variable-secret"
+description = "Secret assigned to a PowerShell variable or \$env: slot"
+regex = '''\$(env:)?(PASSWORD|SECRET|TOKEN|API_KEY|ACCESS_KEY|PRIVATE_KEY|CLIENT_SECRET)\s*=\s*["']([^"'$]{6,})["']'''
+secretGroup = 3
+entropy = 3.0
+keywords = ["PASSWORD", "SECRET", "TOKEN", "API_KEY"]
+path = '''\.ps1$|\.psm1$|\.psd1$'''
+
+  [[rules.allowlists]]
+  description = "Allow interactive reads and secret-store lookups"
+  regexes = [
+    '''Read-Host|Get-Secret|\$env:\w+\s*$'''
+  ]
+
+# ============================================================
+# BASH / SHELL
+# ============================================================
+
+[[rules]]
+id = "bash-export-secret"
+description = "Secret exported as a shell environment variable"
+regex = '''(?i)export\s+(PASSWORD|PASSWD|SECRET|TOKEN|API_KEY|APIKEY|ACCESS_KEY|PRIVATE_KEY|CLIENT_SECRET|DB_PASS|MASTER_KEY)=["']?([^"'$\s]{6,})["']?'''
+secretGroup = 2
+entropy = 3.0
+keywords = ["export", "PASSWORD", "SECRET", "TOKEN", "API_KEY"]
+path = '''\.sh$|\.bash$|\.zsh$|\.bashrc$|\.bash_profile$|\.zshrc$|\.profile$'''
+
+  [[rules.allowlists]]
+  description = "Allow variable references and placeholders"
+  regexes = [
+    '''\$\{|\$\(|(?i)(placeholder|changeme|example|your[-_])'''
+  ]
+
+[[rules]]
+id = "bash-curl-auth-header"
+description = "Hardcoded auth token in a curl command"
+regex = '''curl[^'";\n]*(?:-H|--header)\s+["']Authorization:\s*(Bearer|Basic|Token|ApiKey)\s+([A-Za-z0-9+/=._\-]{16,})["']'''
+secretGroup = 2
+entropy = 3.5
+keywords = ["curl", "Authorization", "Bearer"]
+path = '''\.sh$|\.bash$|\.zsh$|Makefile$|makefile$'''
+
+[[rules]]
+id = "bash-aws-inline-credentials"
+description = "AWS credentials passed inline to the AWS CLI or SDK"
+regex = '''(?i)(AWS_SECRET_ACCESS_KEY|AWS_SESSION_TOKEN)=["']?([A-Za-z0-9+/=]{16,})["']?'''
+secretGroup = 2
+entropy = 3.5
+keywords = ["AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN"]
+
+[[rules]]
+id = "bash-sshpass"
+description = "sshpass -p with a plaintext password"
+regex = '''sshpass\s+-p\s*["']?([^\s"']{6,})["']?'''
+secretGroup = 1
+entropy = 3.0
+keywords = ["sshpass", "-p"]
+path = '''\.sh$|\.bash$|\.zsh$|Makefile$|makefile$'''
+
+# ============================================================
+# DATABASE CONNECTION STRINGS
+# ============================================================
+
+[[rules]]
+id = "db-uri-embedded-credentials"
+description = "Database URI with an embedded username and password"
+regex = '''(postgres(?:ql)?|mysql|mssql|mongodb(?:\+srv)?|redis(?:s)?|amqp(?:s)?|neo4j(?:\+s)?)://([^:@\s]{2,}):([^@\s]{6,})@'''
+secretGroup = 3
+entropy = 3.0
+keywords = ["postgres://", "mysql://", "mongodb://", "redis://", "mssql://", "amqp://"]
+
+  [[rules.allowlists]]
+  description = "Allow localhost/in-cluster service name URIs"
+  regexes = [
+    '''(?i)(localhost|127\.0\.0\.1|@db:|@postgres:|@redis:|@mongo:)(:[0-9]+)?(/|$)'''
+  ]
+
+[[rules]]
+id = "jdbc-password-inline"
+description = "JDBC connection string with inline password parameter"
+regex = '''jdbc:[a-z]+://[^;]+;[Pp]assword=([^;"\s]{6,})'''
+secretGroup = 1
+entropy = 3.0
+keywords = ["jdbc:", "password=", "Password="]
+
+# ============================================================
+# HASHICORP VAULT
+# ============================================================
+
+[[rules]]
+id = "vault-token"
+description = "HashiCorp Vault token (hvs., hvb., or legacy s. prefix)"
+regex = '''(?i)(VAULT_TOKEN|vault[_-]?token)\s*[=:]\s*["']?(hvs\.[A-Za-z0-9]{24,}|hvb\.[A-Za-z0-9]{24,}|s\.[A-Za-z0-9]{24})["']?'''
+secretGroup = 2
+keywords = ["VAULT_TOKEN", "vault_token", "hvs.", "hvb."]
+
+[[rules]]
+id = "vault-approle-secret-id"
+description = "HashiCorp Vault AppRole secret_id (UUID format)"
+regex = '''(?i)(secret[_-]?id|VAULT_SECRET_ID|approle[_-]?secret)\s*[=:]\s*["']?([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})["']?'''
+secretGroup = 2
+keywords = ["secret_id", "VAULT_SECRET_ID", "approle_secret"]
+
+  [[rules.allowlists]]
+  description = "Allow nil and example UUIDs"
+  regexes = [
+    '''00000000-0000-0000-0000-000000000000|xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'''
+  ]
+
+# ============================================================
+# CI/CD
+# ============================================================
+
+[[rules]]
+id = "github-actions-literal-secret"
+description = "Literal secret value in a GitHub Actions workflow where \${{ secrets.* }} should be used"
+regex = '''(?i)(TOKEN|PASSWORD|SECRET|API_KEY|ACCESS_KEY)\s*:\s*(?!\$\{\{)["']([^"']{10,})["']'''
+secretGroup = 2
+entropy = 3.5
+keywords = ["TOKEN:", "PASSWORD:", "SECRET:", "API_KEY:"]
+path = '''\.github/workflows/|\.github/actions/'''
+
+  [[rules.allowlists]]
+  description = "Allow proper secrets context references"
+  regexes = [
+    '''\$\{\{\s*secrets\.'''
+  ]
+
+[[rules]]
+id = "circleci-token"
+description = "CircleCI API or project token"
+regex = '''(?i)(CIRCLE_TOKEN|circleci[_-]?token)\s*[=:]\s*["']?([A-Za-z0-9]{40})["']?'''
+secretGroup = 2
+keywords = ["CIRCLE_TOKEN", "circleci_token"]
+
+[[rules]]
+id = "jenkins-api-token"
+description = "Jenkins API token or build secret"
+regex = '''(?i)(JENKINS_TOKEN|jenkins[_-]?api[_-]?token|jenkins[_-]?secret)\s*[=:]\s*["']?([A-Za-z0-9]{32,})["']?'''
+secretGroup = 2
+keywords = ["JENKINS_TOKEN", "jenkins_api_token", "jenkins_secret"]
+
+# ============================================================
+# GENERIC / CATCH-ALL
+# ============================================================
+
+[[rules]]
+id = "generic-bearer-token-config"
+description = "Hardcoded Bearer token in a config or code file"
+regex = '''(?i)(Authorization|auth[_-]?header)\s*[=:]\s*["']Bearer\s+([A-Za-z0-9\-._~+/]{20,})["']'''
+secretGroup = 2
+entropy = 3.5
+keywords = ["Bearer", "Authorization", "auth_header"]
+
+[[rules]]
+id = "generic-high-entropy-secret"
+description = "High-entropy string assigned to a credential-named variable"
+regex = '''(?i)(secret|password|token|api[_-]?key|private[_-]?key|access[_-]?key|auth[_-]?key|signing[_-]?key|encryption[_-]?key|master[_-]?key)\s*[=:]\s*["']([A-Za-z0-9+/=_\-.]{32,})["']'''
+secretGroup = 2
+entropy = 4.5
+tokenEfficiency = true
+keywords = ["secret", "password", "token", "api_key", "private_key"]
+
+  [[rules.allowlists]]
+  description = "Allow non-secret values that happen to be long"
+  regexes = [
+    '''(?i)(placeholder|changeme|example|fake|dummy|todo|<[^>]+>|\$\{|\$\()''',
+    '''(?i)^(true|false|yes|no|null|none|undefined|enabled|disabled)$'''
+  ]
+
+[[rules]]
+id = "pagerduty-api-key"
+description = "PagerDuty REST API or integration key"
+regex = '''(?i)(pagerduty[_-]?key|PD_API_KEY|PAGERDUTY_TOKEN)\s*[=:]\s*["']?([A-Za-z0-9+_\-]{20,})["']?'''
+secretGroup = 2
+keywords = ["PD_API_KEY", "PAGERDUTY_TOKEN", "pagerduty_key"]
+
+[[rules]]
+id = "datadog-api-key"
+description = "Datadog API or application key"
+regex = '''(?i)(DD_API_KEY|DD_APP_KEY|datadog[_-]?api[_-]?key)\s*[=:]\s*["']?([A-Za-z0-9]{32,40})["']?'''
+secretGroup = 2
+entropy = 3.5
+keywords = ["DD_API_KEY", "DD_APP_KEY", "datadog_api_key"]
+
+# ============================================================
+# GLOBAL ALLOWLISTS
+# ============================================================
+
+[[allowlists]]
+description = "Ignore binary, lock, and generated asset files"
+paths = [
+  '''\.(png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot|otf|pdf|lock|sum)$''',
+  '''package-lock\.json$|yarn\.lock$|Pipfile\.lock$|poetry\.lock$|Gemfile\.lock$|go\.sum$'''
+]
+
+[[allowlists]]
+description = "Ignore Terraform provider cache, state, and lock files"
+paths = [
+  '''\.terraform[\\/]''',
+  '''terraform\.tfstate(\.backup)?$''',
+  '''\.terraform\.lock\.hcl$'''
+]
+
+[[allowlists]]
+description = "Ignore IDE and editor config directories"
+paths = [
+  '''\.vscode[\\/]|\.idea[\\/]|\.fleet[\\/]'''
+]
+
+[[allowlists]]
+description = "Ignore test fixtures, mocks, and test helper files"
+paths = [
+  '''(test|spec|__tests__|fixtures|mocks|testdata)[\\/]''',
+  '''_test\.(go|py|rb|js|ts)$|\.test\.(js|ts)$|\.spec\.(js|ts)$''',
+  '''(^|[\\/])(fake_|mock_|stub_)'''
+]
+
+[[allowlists]]
+description = "Ignore changelog, readme, and documentation source files"
+paths = [
+  '''(CHANGELOG|CHANGES|HISTORY|README|CONTRIBUTING|LICENSE|AUTHORS)(\.md|\.txt|\.rst)?$''',
+  '''docs[\\/]|documentation[\\/]'''
+]
+
+[[allowlists]]
+description = "Ignore sample, example, and template config files"
+paths = [
+  '''\.example$|\.sample$|\.template$|\.dist$''',
+  '''\.(example|sample|dist)\.(env|yaml|yml|json|toml|ini|conf)$''',
+  '''\.env\.example$|\.env\.sample$|env\.dist$'''
+]
+
+[[allowlists]]
+description = "Ignore vendor and dependency directories"
+paths = [
+  '''vendor[\\/]|node_modules[\\/]|\.venv[\\/]|venv[\\/]|site-packages[\\/]|\.bundle[\\/]'''
+]

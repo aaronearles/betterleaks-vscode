@@ -2,7 +2,7 @@
   "name": "betterleaks-vscode",
   "displayName": "Betterleaks Secrets Scanner",
   "description": "Scans your workspace for secrets using betterleaks, with built-in rules for Terraform, PowerShell, and IaC files.",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "publisher": "aaronearles",
   "license": "MIT",
   "repository": "https://github.com/aaronearles/betterleaks-vscode",

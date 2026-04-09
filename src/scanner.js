@@ -3,7 +3,7 @@ const path = require('path');
 const os = require('os');
 const fs = require('fs');
 const { execFile } = require('child_process');
-const { BUNDLED_CONFIG } = require('./config');
+const { getBundledConfig, hasWorkspaceConfig } = require('./config');
 const { setFindings, setFileFindings, getTotalCount } = require('./diagnostics');
 
 const BETTERLEAKS_VERSION = '1.1.2';
@@ -52,10 +52,14 @@ function runScan(targetPath) {
         '--exit-code', '0'
     ];
 
-    const env = {
-        ...process.env,
-        BETTERLEAKS_CONFIG_TOML: BUNDLED_CONFIG
-    };
+    // Only pass bundled config if no workspace .betterleaks.toml / .gitleaks.toml exists.
+    // betterleaks precedence: env var (priority 3) beats workspace file (priority 4),
+    // so we must skip the env var to let workspace configs take effect.
+    const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    const env = { ...process.env };
+    if (!workspaceRoot || !hasWorkspaceConfig(workspaceRoot)) {
+        env.BETTERLEAKS_CONFIG_TOML = getBundledConfig();
+    }
 
     execFile(binaryPath, args, { env, maxBuffer: 10 * 1024 * 1024 }, (err, stdout, stderr) => {
         scanInProgress = false;
